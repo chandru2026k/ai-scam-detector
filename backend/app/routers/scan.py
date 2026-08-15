@@ -1,5 +1,6 @@
 from fastapi import APIRouter
 from pydantic import BaseModel
+from app.risk_engine.engine import compute_risk_score
 
 router = APIRouter()
 
@@ -15,38 +16,35 @@ class SmsScan(BaseModel):
     text: str
     sender: str
 
+# TEMPORARY mock versions of B and C's functions until they hand off the real ones
+def fake_classify_text(text: str) -> dict:
+    return {"is_scam_prob": 0.7, "signals": ["Urgency language detected"]}
+
+def fake_check_url(url: str) -> dict:
+    return {"flagged": True, "reputation_score": 60, "signals": ["Domain registered recently"]}
+
 @router.post("/email")
 def scan_email(data: EmailScan):
-    return {
-        "risk_score": 72,
-        "label": "high_risk",
-        "factors": [
-            {"reason": "Urgency language detected", "weight": 30},
-            {"reason": "Suspicious sender domain", "weight": 42}
-        ]
-    }
+    ml_result = fake_classify_text(data.subject + " " + data.body)
+    intel_result = fake_check_url(data.sender)
+    return compute_risk_score(ml_result, intel_result)
 
 @router.post("/url")
 def scan_url(data: UrlScan):
-    return {
-        "risk_score": 15,
-        "label": "low_risk",
-        "factors": [{"reason": "Domain registered 5 years ago", "weight": 15}]
-    }
+    intel_result = fake_check_url(data.url)
+    ml_result = {"is_scam_prob": 0, "signals": []}
+    return compute_risk_score(ml_result, intel_result)
 
 @router.post("/sms")
 def scan_sms(data: SmsScan):
-    return {
-        "risk_score": 85,
-        "label": "high_risk",
-        "factors": [{"reason": "Requests OTP", "weight": 50}, {"reason": "UPI keyword match", "weight": 35}]
-    }
+    ml_result = fake_classify_text(data.text)
+    intel_result = {"flagged": False, "reputation_score": 0, "signals": []}
+    return compute_risk_score(ml_result, intel_result)
 
 @router.post("/qr")
 def scan_qr():
-    return {
-        "decoded_url": "http://example.com",
-        "risk_score": 60,
-        "label": "medium_risk",
-        "factors": [{"reason": "Shortened URL", "weight": 60}]
-    }
+    ml_result = {"is_scam_prob": 0, "signals": []}
+    intel_result = fake_check_url("http://example.com")
+    result = compute_risk_score(ml_result, intel_result)
+    result["decoded_url"] = "http://example.com"
+    return result
